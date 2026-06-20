@@ -1,8 +1,9 @@
-#!/bin/python
+#!/usr/bin/env python3
 
+import argparse
 import os
 import struct
-import argparse
+import sys
 from time import sleep
 
 FS_PATH = "/sys/kernel/ryzen_smu_drv/"
@@ -11,9 +12,13 @@ VER_PATH = FS_PATH + "version"
 SMU_ARGS = FS_PATH + "smu_args"
 MP1_CMD = FS_PATH + "mp1_smu_cmd"
 
+SMU_OP_SET_CO = 0x35
+SMU_OP_RESET_CO = 0x36
+SMU_OP_GET_CO = 0x48
+
 
 def is_root():
-    return os.getenv("SUDO_USER") is not None or os.geteuid() == 0
+    return os.geteuid() == 0
 
 
 def driver_loaded():
@@ -21,79 +26,98 @@ def driver_loaded():
 
 
 def read_file(file, size):
-    with open(file, "rb") as fp:
-        result = fp.read(size)
-    return result
+    try:
+        with open(file, "rb") as fp:
+            return fp.read(size)
+    except (FileNotFoundError, PermissionError, OSError) as e:
+        print(f"Error reading {file}: {e}")
+        return None
 
 
 def write_file(file, data):
-    with open(file, "wb") as fp:
-        return fp.write(data)
+    try:
+        with open(file, "wb") as fp:
+            return fp.write(data)
+    except (FileNotFoundError, PermissionError, OSError) as e:
+        print(f"Error writing to {file}: {e}")
+        return None
 
 
 def read_file32(file):
     result = read_file(file, 4)
+    if result is None or len(result) < 4:
+        return None
     return struct.unpack("<I", result)[0]
 
 
 def write_file32(file, value):
     data = struct.pack("<I", value)
     result = write_file(file, data)
-
-    return result == 4
+    return result is not None and result == 4
 
 
 def read_file192(file):
     result = read_file(file, 24)
+    if result is None or len(result) < 24:
+        return None
     return struct.unpack("<IIIIII", result)
 
 
 def write_file192(file, *values):
     data = struct.pack("<IIIIII", *values)
     result = write_file(file, data)
+    return result is not None and result == 24
 
-    return result == 24
 
-
-def smu_command(op, arg1, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
-    # Check if SMU is currently executing a command
+def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
     value = read_file32(MP1_CMD)
-    if not value:
-        print("Failed to get SMU status response")
+    if value is None:
+        print("Failed to read SMU status.")
         return False
 
-    while int(value) == 0:
-        print("Waiting for existing SMU command to complete...")
-        sleep(1)
+    timeout = 0
+    while value == 0:
+        if timeout > 100:
+            print("SMU is busy or unresponsive.")
+            return False
+        sleep(0.01)
         value = read_file32(MP1_CMD)
+        if value is None:
+            print("Failed to read SMU status.")
+            return False
+        timeout += 1
 
-    # Write all arguments to the appropriate files
     if not write_file192(SMU_ARGS, arg1, arg2, arg3, arg4, arg5, arg6):
         print("Failed to write SMU arguments")
         return False
 
-    # Write the command
     if not write_file32(MP1_CMD, op):
-        print("Failed to execute the SMU command: {:08X}".format(op))
-
-    # Check for the result:
-    value = read_file32(MP1_CMD)
-    if not value:
-        print("SMU OP readback returned false")
+        print(f"Failed to execute the SMU command: {op:08X}")
         return False
 
+    value = read_file32(MP1_CMD)
+    if value is None:
+        print("Failed to read SMU result.")
+        return False
+
+    timeout = 0
     while value == 0:
-        print("Waiting for existing SMU command to complete...")
-        sleep(1)
+        if timeout > 100:
+            print("Timeout waiting for SMU command to complete.")
+            return False
+        sleep(0.01)
         value = read_file32(MP1_CMD)
+        if value is None:
+            print("Failed to read SMU result.")
+            return False
+        timeout += 1
 
     if value != 1:
-        print("SMU Command Result Failed: " + value)
+        print(f"SMU Command Result Failed. Status code: {value}")
         return False
 
     args = read_file192(SMU_ARGS)
-
-    if not args:
+    if args is None:
         print("Failed to read SMU response arguments")
         return False
 
@@ -101,61 +125,112 @@ def smu_command(op, arg1, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
 
 
 def get_core_offset(core_id):
-    result = smu_command(0x48, ((core_id & 8) << 5 | core_id & 7) << 20)
-    # Result could be a boolean False
+    result = smu_command(SMU_OP_GET_CO, ((core_id & 8) << 5 | core_id & 7) << 20)
     if result:
         value = result[0]
-        if value > 2**31:
-            value = value - 2**32
+        if value >= 0x80000000:
+            value -= 0x100000000
         return value
+    return None
 
 
 def set_core_offset(core_id, value):
-    smu_command(0x35, ((core_id & 8) << 5 | core_id & 7) << 20 | value & 0xFFFF)
+    result = smu_command(
+        SMU_OP_SET_CO, (((core_id & 8) << 5 | core_id & 7) << 20) | (value & 0xFFFF)
+    )
+    return result is not False
 
 
-if not is_root():
-    print("Script must be run with root privileges.")
-    quit(1)
+def main():
+    if not is_root():
+        print("Script must be run with root privileges.")
+        sys.exit(1)
 
-if not driver_loaded():
-    print("The driver doesn't seem to be loaded.")
-    quit(1)
+    if not driver_loaded():
+        print(f"The ryzen_smu driver doesn't seem to be loaded at {FS_PATH}")
+        sys.exit(1)
 
+    parser = argparse.ArgumentParser(
+        description="PBO Curve Optimizer utility for Ryzen 5800X3D"
+    )
 
-parser = argparse.ArgumentParser(
-    description="PBO undervolt for Ryzen 5800X3D processor"
-)
-parser.add_argument("-l", "--list", action="store_true", help="List curve offsets")
-parser.add_argument("-o", "--offset", type=int, help="Set curve offset")
-parser.add_argument(
-    "-c", "--corecount", default=1, type=int, help="Set offset to cores [0..corecount]"
-)
-parser.add_argument("-r", "--reset", action="store_true", help="Reset offsets to 0")
+    # Mutually exclusive group: user must choose List, Offset, or Reset (cannot mix)
+    action_group = parser.add_mutually_exclusive_group(required=True)
+    action_group.add_argument(
+        "-l", "--list", action="store_true", help="List current curve offsets"
+    )
+    action_group.add_argument(
+        "-o",
+        "--offset",
+        nargs="+",
+        type=int,
+        help="Set curve offset. One value applies to all cores (e.g. -30), or provide multiple values for per-core offsets (e.g. -30 -20 -15...)",
+    )
+    action_group.add_argument(
+        "-r", "--reset", action="store_true", help="Reset all offsets to 0"
+    )
 
+    parser.add_argument(
+        "-c",
+        "--corecount",
+        default=8,
+        type=int,
+        help="Number of cores to iterate over. Defaults to 8.",
+    )
 
-args = parser.parse_args()
-cc = 1
-if args.corecount:
+    args = parser.parse_args()
     cc = args.corecount
 
-if args.list:
-    for c in range(0, cc):
-        print("Core {}: {}".format(c, get_core_offset(c)))
-    quit()
-if args.reset:
-    smu_command(0x36, 0)
-    print("Offsets set to 0 on all cores!")
-    quit()
-if args.offset:
-    for c in range(0, cc):
-        if args.offset >= 0:
-            print("Offset needs to be negative!")
-            quit(1)
+    # 1. LIST
+    if args.list:
+        for c in range(cc):
+            offset = get_core_offset(c)
+            print(f"Core {c}: {offset if offset is not None else 'Error reading'}")
+        sys.exit(0)
 
-        set_core_offset(c, args.offset)
-        print(
-            "Core {} set to: {} readback: {}".format(c, args.offset, get_core_offset(c))
-        )
-else:
-    parser.print_help()
+    # 2. RESET
+    elif args.reset:
+        if smu_command(SMU_OP_RESET_CO) is not False:
+            print("Offsets successfully set to 0 on all cores!")
+            sys.exit(0)
+        else:
+            print("Failed to reset offsets.")
+            sys.exit(1)
+
+    # 3. SET OFFSETS
+    elif args.offset is not None:
+        # Validate that hardware limits are respected for all inputted offsets
+        if not all(-30 <= x <= 30 for x in args.offset):
+            print(
+                "Error: Hardware limit for Curve Optimizer offsets is between -30 and 30."
+            )
+            sys.exit(1)
+
+        if any(x > 0 for x in args.offset):
+            print(
+                "Warning: One or more offsets are positive. Undervolting usually requires negative values."
+            )
+
+        # Determine if applying a single offset to all, or per-core offsets
+        if len(args.offset) == 1:
+            offsets_to_apply = [args.offset[0]] * cc
+        elif len(args.offset) == cc:
+            offsets_to_apply = args.offset
+        else:
+            print(
+                f"Error: You must provide either 1 offset (applied to all) or exactly {cc} offsets."
+            )
+            sys.exit(1)
+
+        # Apply offsets
+        for c, val in enumerate(offsets_to_apply):
+            if set_core_offset(c, val):
+                print(
+                    f"Core {c} set to: {val:3} | Readback verify: {get_core_offset(c)}"
+                )
+            else:
+                print(f"Core {c}: failed to set offset")
+
+
+if __name__ == "__main__":
+    main()
