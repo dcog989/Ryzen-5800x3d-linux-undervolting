@@ -1,38 +1,80 @@
 # Ryzen 5800X3D Linux Undervolting
 
-A Python script to use Ryzen SMU for Linux PBO tuning / undervolting of Ryzen 5800X3D CPU.
+A Python script to undervolt the Ryzen 5800X3D CPU. It is a Linux implementation of the [Ryzen 5800X3D PBO2 undervolting tool for Windows](https://github.com/PrimeO7/How-to-undervolt-AMD-RYZEN-5800X3D-Guide-with-PBO2-Tuner).
 
-## What is it?
+## Installation
 
-This is a Linux implementation of the PBO2 undervolting tool used to [undervolt Ryzen CPUs in Windows](https://github.com/PrimeO7/How-to-undervolt-AMD-RYZEN-5800X3D-Guide-with-PBO2-Tuner).
+Requirements: `dkms`, `git`, `build-essential`, Linux headers:
 
-## How to use it?
+- `sudo apt install linux-headers-$(uname -r) # Debian / Ubuntu`
+- `sudo pacman -S linux-headers # Arch`
 
-1. Clone <https://GitHub.com/leogx9r/ryzen_smu> repository then install the Ryzen SMU driver to enable communication with the Ryzen SMU (System Management Unit):
+### Install `ryzen_smu`
 
 ```sh
-git clone https://github.com/leogx9r/ryzen_smu
+git clone https://github.com/amkillam/ryzen_smu.git
 cd ryzen_smu
 sudo make dkms-install
 ```
 
-Or install from AUR:
+From AUR:
 
 ```sh
 yay -S ryzen_smu-dkms-git
 ```
 
-Now reboot. The `dkms-install` should make a new module in your system called `ryzen_smu`. It will autostart next time you reboot your system. Without it, the provided Python script will not function.
-
-2. When you have the driver installed and functioning, clone this repository and start the undervolting tool:
+Reload the kernel module:
 
 ```sh
-git clone https://github.com/svenlange2/Ryzen-5800x3d-linux-undervolting.git
-cd Ryzen-5800x3d-linux-undervolting
-sudo python3 ruv.py
+sudo modprobe ryzen_smu
 ```
 
-You should see this output:
+### Load `ryzen_smu` on every boot
+
+```sh
+echo 'ryzen_smu' | sudo tee /etc/modules-load.d/ryzen_smu.conf
+```
+
+### Clone the undervolting tool
+
+```sh
+git clone https://github.com/dcog989/Ryzen-5800x3d-linux-undervolting.git
+cd Ryzen-5800x3d-linux-undervolting
+```
+
+### Create persistent service
+
+```sh
+sudo tee /etc/systemd/system/ryzen-undervolt.service > /dev/null <<'EOF'
+[Unit]
+Description=Ryzen 5800X3D undervolt
+After=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/python /[path to]/Ryzen-5800x3d-linux-undervolting/ruv.py -c 8 -o -30
+
+[Install]
+WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+EOF
+```
+
+### Enable service
+
+```sh
+sudo systemctl daemon-reload && sudo systemctl enable --now ryzen-undervolt.service
+```
+
+```sh
+sudo systemctl status ryzen-undervolt.service # check service status
+```
+
+---
+
+## Usage
+
+Run `sudo python ruv.py -h` for help:
 
 ```sh
 usage: ruv.py [-h] (-l | -o OFFSET [OFFSET ...] | -r) [-c CORECOUNT]
@@ -51,10 +93,10 @@ options:
                         Number of cores to iterate over. Defaults to 8.
 ```
 
-3. Now you can query and write PBO curve offsets on the fly. On 5800X3D you have 8 cores (plus 8 virtual hyperthreading counterparts). To set all cores to -30 offset:
+Now you can query and write PBO curve offsets on the fly. On 5800X3D you have 8 cores (plus 8 virtual hyperthreading counterparts). To set all cores to -30 offset:
 
 ```sh
-sudo python3 ruv.py -c 8 -o -30
+sudo python ruv.py -c 8 -o -30
 ```
 
 will return:
@@ -73,66 +115,30 @@ Core 7 set to: -30 | Readback verify: -30
 You can also set per-core offsets by providing multiple values:
 
 ```sh
-sudo python3 ruv.py -c 8 -o -30 -25 -20 -15 -10 -5 0 0
+sudo python ruv.py -c 8 -o -30 -25 -20 -15 -10 -5 0 0
 ```
 
 To list current offsets:
 
 ```sh
-sudo python3 ruv.py -l -c 8
+sudo python ruv.py -l -c 8
 ```
 
 To reset all offsets to 0:
 
 ```sh
-sudo python3 ruv.py -r
+sudo python ruv.py -r
 ```
 
 The script response indicates what values were stored in the registers.
 
 > [!NOTE]
-> -30 appears to be a hard limit for the 5800X3D, so even if you exceed that it will reset back to -30.
-> All offsets will reset on reboot so install this commandline as a service to automate things at reboots.
-
----
-
-## Create persistent service
-
-Switch `fresh` for your preferred terminal editor:
-
-```sh
-sudo fresh /etc/systemd/system/ryzen-undervolt.service
-```
-
-Add this to the service:
-
-```ini
-[Unit]
-Description=Ryzen 5800X3D undervolt
-After=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/python3 /[path to]/Ryzen-5800x3d-linux-undervolting/ruv.py -c 8 -o -30
-User=root
-
-[Install]
-WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
-
-```
-
-### Enable service
-
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable ryzen-undervolt.service
-sudo systemctl start ryzen-undervolt.service
-sudo systemctl status ryzen-undervolt.service
-```
+> Curve Optimizer offsets are limited to the -30..30 range. -30 is the practical undervolting limit for the 5800X3D, and the SMU will clamp anything past it back to -30. The ruv script rejects out-of-range values.
+> All offsets reset on reboot, so install the tool as a service to re-apply them automatically.
 
 ### Verify after restart / sleep
 
 ```sh
 cd ~/[path to]/Ryzen-5800x3d-linux-undervolting
-sudo python3 ruv.py -l -c 8
+sudo python ruv.py -l -c 8
 ```
