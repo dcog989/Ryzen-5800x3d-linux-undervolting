@@ -92,28 +92,28 @@ def wait_for_smu(msg="SMU is busy or unresponsive."):
 
 def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
     if wait_for_smu() is None:
-        return False
+        return None
 
     if not write_file192(SMU_ARGS, arg1, arg2, arg3, arg4, arg5, arg6):
         print("Failed to write SMU arguments")
-        return False
+        return None
 
     if not write_file32(MP1_CMD, op):
         print(f"Failed to execute the SMU command: {op:08X}")
-        return False
+        return None
 
     value = wait_for_smu("Timeout waiting for SMU command to complete.")
     if value is None:
-        return False
+        return None
 
     if value != 1:
         print(f"SMU Command Result Failed. Status code: {value}")
-        return False
+        return None
 
     args = read_file192(SMU_ARGS)
     if args is None:
         print("Failed to read SMU response arguments")
-        return False
+        return None
 
     return args
 
@@ -132,7 +132,7 @@ def set_core_offset(core_id, value):
     result = smu_command(
         SMU_OP_SET_CO, (((core_id & 8) << 5 | core_id & 7) << 20) | (value & 0xFFFF)
     )
-    return result is not False
+    return result is not None
 
 
 def main():
@@ -184,7 +184,7 @@ def main():
 
     # 2. RESET
     elif args.reset:
-        if smu_command(SMU_OP_RESET_CO) is not False:
+        if smu_command(SMU_OP_RESET_CO) is not None:
             print("Offsets successfully set to 0 on all cores!")
             sys.exit(0)
         else:
