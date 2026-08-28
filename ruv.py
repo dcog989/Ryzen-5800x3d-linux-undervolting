@@ -221,7 +221,7 @@ def main():
         for c, val in enumerate(offsets_to_apply):
             if set_core_offset(c, val):
                 print(
-                    f"Core {c} set to: {val:3} | Readback verify: {get_core_offset(c)}"
+                    f"Core {c} set to: {val} | Readback verify: {get_core_offset(c)}"
                 )
             else:
                 print(f"Core {c}: failed to set offset")
