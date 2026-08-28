@@ -19,7 +19,7 @@ sudo make dkms-install
 Or install from AUR:
 
 ```sh
-paru -S ryzen_smu-dkms-git
+yay -S ryzen_smu-dkms-git
 ```
 
 Now reboot. The `dkms-install` should make a new module in your system called `ryzen_smu`. It will autostart next time you reboot your system. Without it, the provided Python script will not function.

@@ -69,23 +69,30 @@ def write_file192(file, *values):
     return result is not None and result == 24
 
 
-def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
+def wait_for_smu(msg="SMU is busy or unresponsive."):
     value = read_file32(MP1_CMD)
     if value is None:
         print("Failed to read SMU status.")
-        return False
+        return None
 
-    timeout = 0
+    waited = 0
     while value == 0:
-        if timeout > 100:
-            print("SMU is busy or unresponsive.")
-            return False
+        if waited >= 100:
+            print(msg)
+            return None
         sleep(0.01)
         value = read_file32(MP1_CMD)
         if value is None:
             print("Failed to read SMU status.")
-            return False
-        timeout += 1
+            return None
+        waited += 1
+
+    return value
+
+
+def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
+    if wait_for_smu() is None:
+        return False
 
     if not write_file192(SMU_ARGS, arg1, arg2, arg3, arg4, arg5, arg6):
         print("Failed to write SMU arguments")
@@ -95,22 +102,9 @@ def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
         print(f"Failed to execute the SMU command: {op:08X}")
         return False
 
-    value = read_file32(MP1_CMD)
+    value = wait_for_smu("Timeout waiting for SMU command to complete.")
     if value is None:
-        print("Failed to read SMU result.")
         return False
-
-    timeout = 0
-    while value == 0:
-        if timeout > 100:
-            print("Timeout waiting for SMU command to complete.")
-            return False
-        sleep(0.01)
-        value = read_file32(MP1_CMD)
-        if value is None:
-            print("Failed to read SMU result.")
-            return False
-        timeout += 1
 
     if value != 1:
         print(f"SMU Command Result Failed. Status code: {value}")
