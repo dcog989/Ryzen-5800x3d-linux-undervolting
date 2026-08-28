@@ -223,6 +223,7 @@ def main():
             sys.exit(1)
 
         # Apply offsets
+        failed = 0
         for c, val in enumerate(offsets_to_apply):
             if set_core_offset(c, val):
                 print(
@@ -230,6 +231,10 @@ def main():
                 )
             else:
                 print(f"Core {c}: failed to set offset")
+                failed += 1
+
+        if failed:
+            sys.exit(1)
 
 
 if __name__ == "__main__":
