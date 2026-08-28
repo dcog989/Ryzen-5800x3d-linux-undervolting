@@ -220,9 +220,9 @@ def main():
         failed = 0
         for c, val in enumerate(offsets_to_apply):
             if set_core_offset(c, val):
-                print(
-                    f"Core {c} set to: {val} | Readback verify: {get_core_offset(c)}"
-                )
+                readback = get_core_offset(c)
+                readback = readback if readback is not None else "Error reading"
+                print(f"Core {c} set to: {val} | Readback verify: {readback}")
             else:
                 print(f"Core {c}: failed to set offset")
                 failed += 1
