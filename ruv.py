@@ -174,6 +174,8 @@ def main():
 
     args = parser.parse_args()
     cc = args.corecount
+    if not 1 <= cc <= 8:
+        parser.error("--corecount must be between 1 and 8 (5800X3D has 8 cores).")
 
     # 1. LIST
     if args.list:
