@@ -221,8 +221,16 @@ def main():
         for c, val in enumerate(offsets_to_apply):
             if set_core_offset(c, val):
                 readback = get_core_offset(c)
-                readback = readback if readback is not None else "Error reading"
-                print(f"Core {c} set to: {val} | Readback verify: {readback}")
+                if readback is None:
+                    print(f"Core {c} set to: {val} | Readback verify: Error reading")
+                    failed += 1
+                elif readback != val:
+                    print(
+                        f"Core {c} set to: {val} | Readback verify: MISMATCH, got {readback}"
+                    )
+                    failed += 1
+                else:
+                    print(f"Core {c} set to: {val} | Readback verify: {readback}")
             else:
                 print(f"Core {c}: failed to set offset")
                 failed += 1
