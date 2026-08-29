@@ -4,7 +4,6 @@ import argparse
 import os
 import struct
 import sys
-from time import sleep
 
 FS_PATH = "/sys/kernel/ryzen_smu_drv/"
 
@@ -69,45 +68,24 @@ def write_file192(file, *values):
     return result is not None and result == 24
 
 
-def wait_for_smu(msg="SMU is busy or unresponsive."):
-    value = read_file32(MP1_CMD)
-    if value is None:
-        print("Failed to read SMU status.")
-        return None
-
-    waited = 0
-    while value == 0:
-        if waited >= 100:
-            print(msg)
-            return None
-        sleep(0.01)
-        value = read_file32(MP1_CMD)
-        if value is None:
-            print("Failed to read SMU status.")
-            return None
-        waited += 1
-
-    return value
-
-
 def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
-    if wait_for_smu() is None:
-        return None
-
     if not write_file192(SMU_ARGS, arg1, arg2, arg3, arg4, arg5, arg6):
         print("Failed to write SMU arguments")
         return None
 
+    # The driver executes the command synchronously inside this write and
+    # stores the return code (SMU_Return_OK == 1) in mp1_smu_cmd.
     if not write_file32(MP1_CMD, op):
         print(f"Failed to execute the SMU command: {op:08X}")
         return None
 
-    value = wait_for_smu("Timeout waiting for SMU command to complete.")
-    if value is None:
+    status = read_file32(MP1_CMD)
+    if status is None:
+        print("Failed to read SMU status.")
         return None
 
-    if value != 1:
-        print(f"SMU Command Result Failed. Status code: {value}")
+    if status != 1:
+        print(f"SMU Command Result Failed. Status code: {status}")
         return None
 
     args = read_file192(SMU_ARGS)
