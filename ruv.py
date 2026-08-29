@@ -25,21 +25,13 @@ def driver_loaded():
 
 
 def read_file(file, size):
-    try:
-        with open(file, "rb") as fp:
-            return fp.read(size)
-    except (FileNotFoundError, PermissionError, OSError) as e:
-        print(f"Error reading {file}: {e}")
-        return None
+    with open(file, "rb") as fp:
+        return fp.read(size)
 
 
 def write_file(file, data):
-    try:
-        with open(file, "wb") as fp:
-            return fp.write(data)
-    except (FileNotFoundError, PermissionError, OSError) as e:
-        print(f"Error writing to {file}: {e}")
-        return None
+    with open(file, "wb") as fp:
+        return fp.write(data)
 
 
 def read_file32(file):
@@ -69,17 +61,23 @@ def write_file192(file, *values):
 
 
 def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
-    if not write_file192(SMU_ARGS, arg1, arg2, arg3, arg4, arg5, arg6):
-        print("Failed to write SMU arguments")
+    try:
+        if not write_file192(SMU_ARGS, arg1, arg2, arg3, arg4, arg5, arg6):
+            print("Failed to write SMU arguments")
+            return None
+
+        # The driver executes the command synchronously inside this write and
+        # stores the return code (SMU_Return_OK == 1) in mp1_smu_cmd.
+        if not write_file32(MP1_CMD, op):
+            print(f"Failed to execute the SMU command: {op:08X}")
+            return None
+
+        status = read_file32(MP1_CMD)
+        args = read_file192(SMU_ARGS)
+    except OSError as e:
+        print(f"SMU command {op:#04x} failed: {e}")
         return None
 
-    # The driver executes the command synchronously inside this write and
-    # stores the return code (SMU_Return_OK == 1) in mp1_smu_cmd.
-    if not write_file32(MP1_CMD, op):
-        print(f"Failed to execute the SMU command: {op:08X}")
-        return None
-
-    status = read_file32(MP1_CMD)
     if status is None:
         print("Failed to read SMU status.")
         return None
@@ -88,7 +86,6 @@ def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
         print(f"SMU Command Result Failed. Status code: {status}")
         return None
 
-    args = read_file192(SMU_ARGS)
     if args is None:
         print("Failed to read SMU response arguments")
         return None
