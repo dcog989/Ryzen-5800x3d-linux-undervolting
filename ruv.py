@@ -157,9 +157,14 @@ def main():
 
     # 1. LIST
     if args.list:
+        failed = 0
         for c in range(cc):
             offset = get_core_offset(c)
+            if offset is None:
+                failed += 1
             print(f"Core {c}: {offset if offset is not None else 'Error reading'}")
+        if failed:
+            sys.exit(1)
         sys.exit(0)
 
     # 2. RESET
