@@ -121,9 +121,9 @@ def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
 def get_core_offset(core_id):
     result = smu_command(SMU_OP_GET_CO, ((core_id & 8) << 5 | core_id & 7) << 20)
     if result:
-        value = result[0]
-        if value >= 0x80000000:
-            value -= 0x100000000
+        value = result[0] & 0xFFFF
+        if value >= 0x8000:
+            value -= 0x10000
         return value
     return None
 
