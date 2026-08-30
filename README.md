@@ -44,6 +44,7 @@ yay -S ryzen_smu-dkms-git # or paru or other AUR helper
 
 ```sh
 sudo modprobe ryzen_smu # enable the kernel module once installed
+sudo dmesg | grep ryzen_smu # verify the module is loaded
 ```
 
 ### Load on every boot
@@ -81,6 +82,7 @@ EOF
 
 ```sh
 sudo systemctl daemon-reload && sudo systemctl enable --now ryzen-undervolt.service
+sudo systemctl start ryzen-undervolt.service
 ```
 
 ```sh
