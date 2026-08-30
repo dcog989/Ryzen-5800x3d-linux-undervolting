@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ==========================================================
+# Ryzen 5800X3D Linux Undervolting Script
+# https://github.com/dcog989/Ryzen-5800x3d-linux-undervolting
+# ==========================================================
 
 import argparse
 import os
