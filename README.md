@@ -71,7 +71,7 @@ After=multi-user.target suspend.target hibernate.target hybrid-sleep.target susp
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/python /[path to]/Ryzen-5800x3d-linux-undervolting/ruv.py -c 8 -o -30
+ExecStart=/usr/bin/python3 /[path to]/Ryzen-5800x3d-linux-undervolting/ruv.py -c 8 -o -30
 
 [Install]
 WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
