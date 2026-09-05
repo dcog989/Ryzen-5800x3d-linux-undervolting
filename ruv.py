@@ -140,7 +140,10 @@ def main():
         help="Set curve offset. One value applies to all cores (e.g. -30), or provide multiple values for per-core offsets (e.g. -30 -20 -15...)",
     )
     action_group.add_argument(
-        "-r", "--reset", action="store_true", help="Reset all offsets to 0"
+        "-r",
+        "--reset",
+        action="store_true",
+        help="Reset all offsets to 0 (always all cores; --corecount is ignored)",
     )
 
     parser.add_argument(
