@@ -15,6 +15,11 @@ VER_PATH = FS_PATH + "version"
 SMU_ARGS = FS_PATH + "smu_args"
 MP1_CMD = FS_PATH + "mp1_smu_cmd"
 
+CPUINFO = "/proc/cpuinfo"
+# Zen 3 Vermeer (incl. 5800X3D) is family 19h model 21h; other families take different SMU messages
+CPU_FAMILY = 25
+CPU_MODEL = 33
+
 SMU_OP_SET_CO = 0x35
 SMU_OP_RESET_CO = 0x36
 SMU_OP_GET_CO = 0x48
@@ -22,6 +27,18 @@ SMU_OP_GET_CO = 0x48
 
 def is_root():
     return os.geteuid() == 0
+
+
+def cpu_supported():
+    fields = {}
+    with open(CPUINFO) as fp:
+        for line in fp:
+            key, sep, value = line.partition(":")
+            if sep and key.strip() in ("cpu family", "model"):
+                fields[key.strip()] = value.strip()
+    family = fields.get("cpu family")
+    model = fields.get("model")
+    return family == str(CPU_FAMILY) and model == str(CPU_MODEL)
 
 
 def driver_loaded():
@@ -117,6 +134,13 @@ def set_core_offset(core_id, value):
 def main():
     if not is_root():
         print("Script must be run with root privileges.")
+        sys.exit(1)
+
+    if not cpu_supported():
+        print(
+            f"This tool only supports Zen 3 Vermeer CPUs "
+            f"(family {CPU_FAMILY}, model {CPU_MODEL}, e.g. Ryzen 7 5800X3D)."
+        )
         sys.exit(1)
 
     if not driver_loaded():
