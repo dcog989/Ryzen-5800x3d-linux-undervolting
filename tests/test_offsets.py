@@ -10,9 +10,10 @@ import ruv
 class FakeSMU:
     """Stands in for the kernel driver: keeps offsets and answers like the SMU."""
 
-    def __init__(self, initial=None, fail_set=()):
+    def __init__(self, initial=None, fail_set=(), stuck_reset=()):
         self.state = dict(initial or {})
         self.fail_set = set(fail_set)
+        self.stuck_reset = set(stuck_reset)
         self.calls = []
 
     def __call__(self, op, arg1=0, *args):
@@ -27,6 +28,13 @@ class FakeSMU:
         if op == ruv.SMU_OP_GET_CO:
             value = self.state.get(core, 0) & 0xFFFF
             return (value, 0, 0, 0, 0, 0)
+        if op == ruv.SMU_OP_RESET_CO:
+            self.state = {
+                core: value
+                for core, value in self.state.items()
+                if core in self.stuck_reset
+            }
+            return (0,) * 6
         raise AssertionError(f"unexpected SMU op {op:#x}")
 
 
@@ -91,6 +99,19 @@ class RuvTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as exit:
             self.run_main("-l", "-c", "9")
         self.assertEqual(exit.exception.code, 2)
+
+    def test_reset_verifies_every_core(self):
+        self.smu.state = {core: -20 for core in range(8)}
+        self.smu.stuck_reset = {6}
+        with self.assertRaises(SystemExit) as exit:
+            self.run_main("-r")
+        self.assertEqual(exit.exception.code, 1)
+
+    def test_reset_passes_when_all_cores_read_zero(self):
+        self.smu.state = {core: -20 for core in range(8)}
+        with self.assertRaises(SystemExit) as exit:
+            self.run_main("-r")
+        self.assertEqual(exit.exception.code, 0)
 
     def test_failed_core_rolls_back_every_offset(self):
         self.smu.state = {core: -15 for core in range(8)}

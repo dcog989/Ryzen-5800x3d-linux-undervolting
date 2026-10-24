@@ -167,7 +167,7 @@ def main():
         "-r",
         "--reset",
         action="store_true",
-        help="Reset all offsets to 0 (always all cores; --corecount is ignored)",
+        help="Reset all offsets to 0, then verify the first --corecount cores",
     )
 
     parser.add_argument(
@@ -197,12 +197,24 @@ def main():
 
     # 2. RESET
     elif args.reset:
-        if smu_command(SMU_OP_RESET_CO) is not None:
-            print("Offsets successfully set to 0 on all cores!")
-            sys.exit(0)
-        else:
+        if smu_command(SMU_OP_RESET_CO) is None:
             print("Failed to reset offsets.")
             sys.exit(1)
+
+        failed = 0
+        for c in range(cc):
+            offset = get_core_offset(c)
+            if offset != 0:
+                print(
+                    f"Core {c}: {offset if offset is not None else 'Error reading'}, expected 0"
+                )
+                failed += 1
+        if failed:
+            print("Failed to reset offsets.")
+            sys.exit(1)
+
+        print("Offsets successfully reset to 0.")
+        sys.exit(0)
 
     # 3. SET OFFSETS
     elif args.offset is not None:
