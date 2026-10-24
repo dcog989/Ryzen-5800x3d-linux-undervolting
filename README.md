@@ -34,6 +34,12 @@ git clone https://github.com/dcog989/Ryzen-5800x3d-linux-undervolting.git
 cd Ryzen-5800x3d-linux-undervolting
 ```
 
+Install the script root-owned, so root never runs a file your user can edit. Rerun this after every change to `ruv.py`:
+
+```sh
+sudo install -o root -g root -m 755 ruv.py /usr/local/sbin/ruv.py
+```
+
 Install as a systemd service:
 
 ```sh
@@ -45,7 +51,7 @@ After=multi-user.target suspend.target hibernate.target hybrid-sleep.target susp
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/python3 /[path to]/Ryzen-5800x3d-linux-undervolting/ruv.py -c 8 -o -15
+ExecStart=/usr/local/sbin/ruv.py -c 8 -o -15
 
 [Install]
 WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
@@ -72,10 +78,10 @@ sudo systemctl status ryzen-undervolt.service # check service status
 
 ```sh
 python3 ruv.py -h # show help (no root needed)
-sudo python3 ruv.py -l # list current offsets
-sudo python3 ruv.py -c 8 -o -15 # set all cores to -15 offset
-sudo python3 ruv.py -c 8 -o -30 -25 -20 -15 -10 -5 -5 -10 # set per-core offsets
-sudo python3 ruv.py -r # reset all offsets to 0
+sudo /usr/local/sbin/ruv.py -l # list current offsets
+sudo /usr/local/sbin/ruv.py -c 8 -o -15 # set all cores to -15 offset
+sudo /usr/local/sbin/ruv.py -c 8 -o -30 -25 -20 -15 -10 -5 -5 -10 # set per-core offsets
+sudo /usr/local/sbin/ruv.py -r # reset all offsets to 0
 ```
 
 The script response confirms what values were stored.
@@ -90,8 +96,7 @@ The script response confirms what values were stored.
 ### Verify after restart / sleep
 
 ```sh
-cd ~/[path to]/Ryzen-5800x3d-linux-undervolting
-sudo python3 ruv.py -l -c 8
+sudo /usr/local/sbin/ruv.py -l -c 8
 ```
 
 ---
