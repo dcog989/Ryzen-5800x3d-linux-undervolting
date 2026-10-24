@@ -243,24 +243,30 @@ def main():
             print("Error: failed to read current offsets; nothing was applied.")
             sys.exit(1)
 
-        # Apply offsets
+        # Apply offsets; a failure or Ctrl-C rolls every core back to the snapshot
         failed = 0
-        for c, val in enumerate(offsets_to_apply):
-            if set_core_offset(c, val):
-                readback = get_core_offset(c)
-                if readback is None:
-                    print(f"Core {c} set to: {val} | Readback verify: Error reading")
-                    failed += 1
-                elif readback != val:
-                    print(
-                        f"Core {c} set to: {val} | Readback verify: MISMATCH, got {readback}"
-                    )
-                    failed += 1
+        try:
+            for c, val in enumerate(offsets_to_apply):
+                if set_core_offset(c, val):
+                    readback = get_core_offset(c)
+                    if readback is None:
+                        print(
+                            f"Core {c} set to: {val} | Readback verify: Error reading"
+                        )
+                        failed += 1
+                    elif readback != val:
+                        print(
+                            f"Core {c} set to: {val} | Readback verify: MISMATCH, got {readback}"
+                        )
+                        failed += 1
+                    else:
+                        print(f"Core {c} set to: {val} | Readback verify: {readback}")
                 else:
-                    print(f"Core {c} set to: {val} | Readback verify: {readback}")
-            else:
-                print(f"Core {c}: failed to set offset")
-                failed += 1
+                    print(f"Core {c}: failed to set offset")
+                    failed += 1
+        except KeyboardInterrupt:
+            print("Interrupted; restoring previous offsets.")
+            failed += 1
 
         if failed:
             for c, prev in enumerate(previous):
