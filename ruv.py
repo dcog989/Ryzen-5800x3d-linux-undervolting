@@ -59,28 +59,24 @@ def write_file(file, data):
 
 def read_file32(file):
     result = read_file(file, 4)
-    if result is None or len(result) < 4:
+    if len(result) < 4:
         return None
     return struct.unpack("<I", result)[0]
 
 
 def write_file32(file, value):
-    data = struct.pack("<I", value)
-    result = write_file(file, data)
-    return result is not None and result == 4
+    return write_file(file, struct.pack("<I", value)) == 4
 
 
 def read_file192(file):
     result = read_file(file, 24)
-    if result is None or len(result) < 24:
+    if len(result) < 24:
         return None
     return struct.unpack("<IIIIII", result)
 
 
 def write_file192(file, *values):
-    data = struct.pack("<IIIIII", *values)
-    result = write_file(file, data)
-    return result is not None and result == 24
+    return write_file(file, struct.pack("<IIIIII", *values)) == 24
 
 
 def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
