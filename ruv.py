@@ -71,9 +71,10 @@ def write_file192(file, *values):
     return write_file(file, struct.pack("<IIIIII", *values)) == 24
 
 
-def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
+def smu_command(op, arg1=0):
     try:
-        if not write_file192(SMU_ARGS, arg1, arg2, arg3, arg4, arg5, arg6):
+        # The driver takes six argument words; these commands use only the first
+        if not write_file192(SMU_ARGS, arg1, 0, 0, 0, 0, 0):
             print("Failed to write SMU arguments")
             return None
 
