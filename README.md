@@ -119,3 +119,13 @@ The script response confirms what values were stored.
 cd ~/[path to]/Ryzen-5800x3d-linux-undervolting
 sudo python ruv.py -l -c 8
 ```
+
+---
+
+## Tests
+
+```sh
+python3 -m unittest discover
+```
+
+No root and no driver needed: the SMU and `/proc/cpuinfo` are faked.
