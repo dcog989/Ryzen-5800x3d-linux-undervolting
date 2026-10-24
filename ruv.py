@@ -27,10 +27,6 @@ SMU_OP_RESET_CO = 0x36
 SMU_OP_GET_CO = 0x48
 
 
-def is_root():
-    return os.geteuid() == 0
-
-
 def cpu_supported():
     fields = {}
     with open(CPUINFO) as fp:
@@ -41,10 +37,6 @@ def cpu_supported():
     family = fields.get("cpu family")
     model = fields.get("model")
     return family == str(CPU_FAMILY) and model == str(CPU_MODEL)
-
-
-def driver_loaded():
-    return os.path.isfile(VER_PATH)
 
 
 def read_file(file, size):
@@ -172,7 +164,7 @@ def main():
         parser.error("--corecount must be between 1 and 8 (5800X3D has 8 cores).")
 
     # Checked after parsing so -h works without root or the driver
-    if not is_root():
+    if os.geteuid() != 0:
         print("Script must be run with root privileges.")
         sys.exit(1)
 
@@ -183,7 +175,7 @@ def main():
         )
         sys.exit(1)
 
-    if not driver_loaded():
+    if not os.path.isfile(VER_PATH):
         print(f"The ryzen_smu driver doesn't seem to be loaded at {FS_PATH}")
         sys.exit(1)
 

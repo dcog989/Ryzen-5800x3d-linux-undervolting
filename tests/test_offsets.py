@@ -5,6 +5,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import ruv
 
@@ -44,15 +45,19 @@ class RuvTest(unittest.TestCase):
     def setUp(self):
         self.smu = FakeSMU()
         self.saved = {
-            name: getattr(ruv, name)
-            for name in ("smu_command", "is_root", "cpu_supported", "driver_loaded")
+            name: getattr(ruv, name) for name in ("smu_command", "cpu_supported")
         }
         self.argv = sys.argv
         ruv.smu_command = self.smu
-        ruv.is_root = lambda: True
         ruv.cpu_supported = lambda: True
-        ruv.driver_loaded = lambda: True
+        self.patch("ruv.os.geteuid", 0)
+        self.patch("ruv.os.path.isfile", True)
         self.addCleanup(self.restore)
+
+    def patch(self, target, value):
+        patcher = mock.patch(target, return_value=value)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def restore(self):
         sys.argv = self.argv
@@ -103,15 +108,19 @@ class RuvTest(unittest.TestCase):
         self.assertEqual(exit.exception.code, 2)
 
     def test_help_works_without_root_or_driver(self):
-        ruv.is_root = lambda: False
-        ruv.driver_loaded = lambda: False
-        with self.assertRaises(SystemExit) as exit:
+        with (
+            mock.patch("ruv.os.geteuid", return_value=1000),
+            mock.patch("ruv.os.path.isfile", return_value=False),
+            self.assertRaises(SystemExit) as exit,
+        ):
             self.run_main("-h")
         self.assertEqual(exit.exception.code, 0)
 
     def test_refuses_to_run_without_root(self):
-        ruv.is_root = lambda: False
-        with self.assertRaises(SystemExit) as exit:
+        with (
+            mock.patch("ruv.os.geteuid", return_value=1000),
+            self.assertRaises(SystemExit) as exit,
+        ):
             self.run_main("-l")
         self.assertEqual(exit.exception.code, 1)
         self.assertEqual(self.smu.calls, [])
