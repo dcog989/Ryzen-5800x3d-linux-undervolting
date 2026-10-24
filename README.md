@@ -6,7 +6,7 @@ This is a modified fork of the unmaintained [svenlange2/Ryzen-5800x3d-Linux-unde
 
 - **Allows per-core offsets** — pass up to 8 values with `-o` to tune each core individually instead of one value for all cores
 - **Readback verification** — every write is read back and compared; a mismatch (or read failure) is reported and exits non-zero
-- **Correct offset decoding** — curve offsets are read as 16-bit signed values to match the write mask, so values below -15 no longer wrap to large positive numbers
+- **Safer offset decoding** — the reply is masked to the low 16 bits and sign-extended to match the write mask, so stray upper bits in that word cannot turn -30 into a large positive number
 - **Hardened failure handling** — SMU command failures return `None`, I/O errors are caught and reported once at the SMU layer, and the script exits non-zero whenever any core fails
 - **Input validation** — `--corecount` is validated to 1-8 and offsets to the hardware range of -30...30, with a warning on positive values
 - **Cleaner CLI** — `-l`, `-o`, and `-r` are mutually exclusive, `--corecount` defaults to 8, and a `-o` value list is validated against the core count
@@ -16,51 +16,25 @@ This is a modified fork of the unmaintained [svenlange2/Ryzen-5800x3d-Linux-unde
 
 ## Installation
 
-### a. Install from source
+Requires:
 
-> [!NOTE]
-> Requirements: `dkms`, `git`, `build-essential`, Linux headers.
+1. **`ryzen_smu`** — DKMS module (<https://github.com/amkillam/ryzen_smu>), a kernel driver that exposes the CPU's SMU.
+2. **`ruv.py`** — this repo, which requires the DKMS module.
 
-Install Linux headers:
+### Part 1: install the `ryzen_smu` kernel driver
 
-```sh
-sudo apt install linux-headers-$(uname -r) # Debian / Ubuntu
-sudo pacman -S linux-headers # Arch
-```
+[Install from source](https://github.com/amkillam/ryzen_smu), or the `ryzen_smu-dkms-git` AUR package.
 
-```sh
-git clone https://github.com/amkillam/ryzen_smu.git
-cd ryzen_smu
-sudo make dkms-install
-```
+Pick one method only: building it from source *and* installing the AUR package leaves two copies in DKMS.
 
-### b. Install from AUR
-
-```sh
-yay -S ryzen_smu-dkms-git # or paru or other AUR helper
-```
-
-### Reload the kernel module
-
-```sh
-sudo modprobe ryzen_smu # enable the kernel module once installed
-sudo dmesg | grep ryzen_smu # verify the module is loaded
-```
-
-### Load on every boot
-
-```sh
-echo 'ryzen_smu' | sudo tee /etc/modules-load.d/ryzen_smu.conf
-```
-
-### Clone the undervolting tool
+### Part 2: install `ruv.py`
 
 ```sh
 git clone https://github.com/dcog989/Ryzen-5800x3d-linux-undervolting.git
 cd Ryzen-5800x3d-linux-undervolting
 ```
 
-### Create persistent service
+Install as a systemd service:
 
 ```sh
 sudo tee /etc/systemd/system/ryzen-undervolt.service > /dev/null <<'EOF'
@@ -81,7 +55,7 @@ EOF
 > [!NOTE]
 > `-15` is an example starting point. Replace it with the per-core values for your chip.
 
-### Enable service
+Enable the service:
 
 ```sh
 sudo systemctl daemon-reload && sudo systemctl enable --now ryzen-undervolt.service
@@ -98,16 +72,16 @@ sudo systemctl status ryzen-undervolt.service # check service status
 
 ```sh
 python3 ruv.py -h # show help (no root needed)
-sudo python ruv.py -l # list current offsets
-sudo python ruv.py -c 8 -o -15 # set all cores to -15 offset
-sudo python ruv.py -c 8 -o -30 -25 -20 -15 -10 -5 -5 -10 # set per-core offsets
-sudo python ruv.py -r # reset all offsets to 0
+sudo python3 ruv.py -l # list current offsets
+sudo python3 ruv.py -c 8 -o -15 # set all cores to -15 offset
+sudo python3 ruv.py -c 8 -o -30 -25 -20 -15 -10 -5 -5 -10 # set per-core offsets
+sudo python3 ruv.py -r # reset all offsets to 0
 ```
 
 The script response confirms what values were stored.
 
 > [!NOTE]
-> Curve Optimizer offsets are limited to -30...30 range. The SMU will clamp within that range and the `ruv.py` script rejects out-of-range values.
+> Curve Optimizer offsets are limited to -30...30 range and the `ruv.py` script rejects out-of-range values.
 > All offsets reset on reboot, so the tool must be installed as a service to re-apply them automatically.
 > **Start low.** Some 5800X3D samples can hold `-30` on all cores, others might become unstable. So, apply values, stress test, and keep what works for your CPU.
 > A bad offset does not stop the machine from powering on: it shows up as crashes or errors under load, after the service has applied it.
@@ -117,7 +91,7 @@ The script response confirms what values were stored.
 
 ```sh
 cd ~/[path to]/Ryzen-5800x3d-linux-undervolting
-sudo python ruv.py -l -c 8
+sudo python3 ruv.py -l -c 8
 ```
 
 ---
@@ -129,3 +103,9 @@ python3 -m unittest discover
 ```
 
 No root and no driver needed: the SMU and `/proc/cpuinfo` are faked.
+
+---
+
+## License
+
+[MIT License](LICENSE)
