@@ -169,6 +169,14 @@ class RuvTest(unittest.TestCase):
         self.assertTrue(probes)
         self.assertTrue(all(probes))
 
+    def test_second_run_fails_fast_when_locked(self):
+        with open(ruv.LOCK_PATH, "w") as held:
+            fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaises(SystemExit) as exit:
+                self.run_main("-o", "-20")
+        self.assertEqual(exit.exception.code, 1)
+        self.assertEqual(self.smu.calls, [])
+
     def test_failed_core_rolls_back_every_offset(self):
         self.smu.state = {core: -15 for core in range(8)}
         self.smu.fail_set = {5}

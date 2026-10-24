@@ -176,9 +176,16 @@ def main():
 
     # One run at a time: the driver shares smu_args between processes, so two
     # interleaved runs would each undo part of the other. The fd stays open, so
-    # the lock is held until the process exits.
+    # the lock is held until the process exits. Fail fast rather than wait, so a
+    # stuck holder never leaves this run hanging with no output.
     try:
-        fcntl.flock(os.open(LOCK_PATH, os.O_WRONLY | os.O_CREAT, 0o644), fcntl.LOCK_EX)
+        fcntl.flock(
+            os.open(LOCK_PATH, os.O_WRONLY | os.O_CREAT, 0o644),
+            fcntl.LOCK_EX | fcntl.LOCK_NB,
+        )
+    except BlockingIOError:
+        print("Another ruv.py run is in progress; nothing was changed.")
+        sys.exit(1)
     except OSError as e:
         print(f"Cannot lock {LOCK_PATH}: {e}")
         sys.exit(1)
