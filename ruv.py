@@ -109,8 +109,9 @@ def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
     return args
 
 
+# Core index goes in bits 20-23; the 5800X3D has one CCD, so core_id fits as-is
 def get_core_offset(core_id):
-    result = smu_command(SMU_OP_GET_CO, ((core_id & 8) << 5 | core_id & 7) << 20)
+    result = smu_command(SMU_OP_GET_CO, core_id << 20)
     if result:
         value = result[0] & 0xFFFF
         if value >= 0x8000:
@@ -120,9 +121,7 @@ def get_core_offset(core_id):
 
 
 def set_core_offset(core_id, value):
-    result = smu_command(
-        SMU_OP_SET_CO, (((core_id & 8) << 5 | core_id & 7) << 20) | (value & 0xFFFF)
-    )
+    result = smu_command(SMU_OP_SET_CO, (core_id << 20) | (value & 0xFFFF))
     return result is not None
 
 
