@@ -1,5 +1,7 @@
 import contextlib
+import fcntl
 import io
+import struct
 import sys
 import tempfile
 import unittest
@@ -126,6 +128,34 @@ class RuvTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as exit:
             self.run_main("-r")
         self.assertEqual(exit.exception.code, 0)
+
+    def test_smu_command_holds_the_lock_while_writing(self):
+        probes = []
+
+        def probe(file, data):
+            with open(ruv.LOCK_PATH, "w") as other:
+                try:
+                    fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    probes.append(True)
+                else:
+                    probes.append(False)
+            return len(data)
+
+        saved = {name: getattr(ruv, name) for name in ("write_file", "read_file")}
+        with tempfile.NamedTemporaryFile() as tmp:
+            saved_path, ruv.LOCK_PATH = ruv.LOCK_PATH, tmp.name
+            ruv.write_file = probe
+            ruv.read_file = lambda file, size: struct.pack("<I", 1) * (size // 4)
+            try:
+                self.saved["smu_command"](ruv.SMU_OP_GET_CO)
+            finally:
+                ruv.LOCK_PATH = saved_path
+                for name, value in saved.items():
+                    setattr(ruv, name, value)
+
+        self.assertTrue(probes)
+        self.assertTrue(all(probes))
 
     def test_failed_core_rolls_back_every_offset(self):
         self.smu.state = {core: -15 for core in range(8)}
