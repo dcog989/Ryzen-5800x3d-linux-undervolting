@@ -1,7 +1,6 @@
 import contextlib
 import fcntl
 import io
-import struct
 import sys
 import tempfile
 import unittest
@@ -61,6 +60,11 @@ class RuvTest(unittest.TestCase):
         ruv.cpu_supported = lambda: True
         self.patch("ruv.os.geteuid", 0)
         self.patch("ruv.os.path.isfile", True)
+        lock_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(lock_dir.cleanup)
+        lock_path = mock.patch("ruv.LOCK_PATH", f"{lock_dir.name}/ruv.lock")
+        lock_path.start()
+        self.addCleanup(lock_path.stop)
         self.addCleanup(self.restore)
 
     def patch(self, target, value):
@@ -147,10 +151,10 @@ class RuvTest(unittest.TestCase):
             self.run_main("-r")
         self.assertEqual(exit.exception.code, 0)
 
-    def test_smu_command_holds_the_lock_while_writing(self):
+    def test_lock_is_held_for_the_whole_run(self):
         probes = []
 
-        def probe(file, data):
+        def probed_smu(op, arg1=0, *args):
             with open(ruv.LOCK_PATH, "w") as other:
                 try:
                     fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -158,20 +162,10 @@ class RuvTest(unittest.TestCase):
                     probes.append(True)
                 else:
                     probes.append(False)
-            return len(data)
+            return self.smu(op, arg1, *args)
 
-        saved = {name: getattr(ruv, name) for name in ("write_file", "read_file")}
-        with tempfile.NamedTemporaryFile() as tmp:
-            saved_path, ruv.LOCK_PATH = ruv.LOCK_PATH, tmp.name
-            ruv.write_file = probe
-            ruv.read_file = lambda file, size: struct.pack("<I", 1) * (size // 4)
-            try:
-                self.saved["smu_command"](ruv.SMU_OP_GET_CO)
-            finally:
-                ruv.LOCK_PATH = saved_path
-                for name, value in saved.items():
-                    setattr(ruv, name, value)
-
+        ruv.smu_command = probed_smu
+        self.run_main("-o", "-20")
         self.assertTrue(probes)
         self.assertTrue(all(probes))
 

@@ -73,23 +73,18 @@ def write_file192(file, *values):
 
 def smu_command(op, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0):
     try:
-        # The driver shares smu_args and mp1_smu_cmd between processes: without
-        # the lock a second run can swap the arguments before our command fires
-        with open(LOCK_PATH, "w") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        if not write_file192(SMU_ARGS, arg1, arg2, arg3, arg4, arg5, arg6):
+            print("Failed to write SMU arguments")
+            return None
 
-            if not write_file192(SMU_ARGS, arg1, arg2, arg3, arg4, arg5, arg6):
-                print("Failed to write SMU arguments")
-                return None
+        # The driver executes the command synchronously inside this write and
+        # stores the return code (SMU_Return_OK == 1) in mp1_smu_cmd.
+        if not write_file32(MP1_CMD, op):
+            print(f"Failed to execute the SMU command: {op:08X}")
+            return None
 
-            # The driver executes the command synchronously inside this write and
-            # stores the return code (SMU_Return_OK == 1) in mp1_smu_cmd.
-            if not write_file32(MP1_CMD, op):
-                print(f"Failed to execute the SMU command: {op:08X}")
-                return None
-
-            status = read_file32(MP1_CMD)
-            args = read_file192(SMU_ARGS)
+        status = read_file32(MP1_CMD)
+        args = read_file192(SMU_ARGS)
     except OSError as e:
         print(f"SMU command {op:#04x} failed: {e}")
         return None
@@ -176,6 +171,15 @@ def main():
 
     if not os.path.isfile(VER_PATH):
         print(f"The ryzen_smu driver doesn't seem to be loaded at {FS_PATH}")
+        sys.exit(1)
+
+    # One run at a time: the driver shares smu_args between processes, so two
+    # interleaved runs would each undo part of the other. The fd stays open, so
+    # the lock is held until the process exits.
+    try:
+        fcntl.flock(os.open(LOCK_PATH, os.O_WRONLY | os.O_CREAT, 0o644), fcntl.LOCK_EX)
+    except OSError as e:
+        print(f"Cannot lock {LOCK_PATH}: {e}")
         sys.exit(1)
 
     # 1. LIST
