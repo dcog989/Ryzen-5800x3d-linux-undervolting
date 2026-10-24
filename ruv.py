@@ -236,8 +236,12 @@ def main():
             )
             sys.exit(1)
 
-        # Snapshot current offsets so a partial apply can be undone
+        # Snapshot current offsets so a partial apply can be undone. A partial
+        # snapshot cannot be restored faithfully, so refuse to write at all.
         previous = [get_core_offset(c) for c in range(cc)]
+        if None in previous:
+            print("Error: failed to read current offsets; nothing was applied.")
+            sys.exit(1)
 
         # Apply offsets
         failed = 0
@@ -260,7 +264,7 @@ def main():
 
         if failed:
             for c, prev in enumerate(previous):
-                if not set_core_offset(c, 0 if prev is None else prev):
+                if not set_core_offset(c, prev):
                     print(f"Core {c}: failed to restore previous offset")
             print("Apply failed; restored previous offsets where possible.")
             sys.exit(1)

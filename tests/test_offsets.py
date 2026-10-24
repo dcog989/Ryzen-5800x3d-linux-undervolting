@@ -13,9 +13,10 @@ import ruv
 class FakeSMU:
     """Stands in for the kernel driver: keeps offsets and answers like the SMU."""
 
-    def __init__(self, initial=None, fail_set=(), stuck_reset=()):
+    def __init__(self, initial=None, fail_set=(), fail_get=(), stuck_reset=()):
         self.state = dict(initial or {})
         self.fail_set = set(fail_set)
+        self.fail_get = set(fail_get)
         self.stuck_reset = set(stuck_reset)
         self.calls = []
 
@@ -29,6 +30,8 @@ class FakeSMU:
             self.state[core] = value - 0x10000 if value >= 0x8000 else value
             return (0,) * 6
         if op == ruv.SMU_OP_GET_CO:
+            if core in self.fail_get:
+                return None
             value = self.state.get(core, 0) & 0xFFFF
             return (value, 0, 0, 0, 0, 0)
         if op == ruv.SMU_OP_RESET_CO:
@@ -172,6 +175,17 @@ class RuvTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as exit:
             self.run_main("-c", "8", "-o", "-20")
         self.assertEqual(exit.exception.code, 1)
+        self.assertEqual(self.smu.state, {core: -15 for core in range(8)})
+
+    def test_incomplete_snapshot_aborts_before_writing(self):
+        self.smu.state = {core: -15 for core in range(8)}
+        self.smu.fail_get = {0}
+        with self.assertRaises(SystemExit) as exit:
+            self.run_main("-o", "-20")
+        self.assertEqual(exit.exception.code, 1)
+        self.assertEqual(
+            self.smu.calls, [(ruv.SMU_OP_GET_CO, core << 20) for core in range(8)]
+        )
         self.assertEqual(self.smu.state, {core: -15 for core in range(8)})
 
 
