@@ -71,12 +71,15 @@ After=multi-user.target suspend.target hibernate.target hybrid-sleep.target susp
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/python3 /[path to]/Ryzen-5800x3d-linux-undervolting/ruv.py -c 8 -o -30
+ExecStart=/usr/bin/python3 /[path to]/Ryzen-5800x3d-linux-undervolting/ruv.py -c 8 -o -15
 
 [Install]
 WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 EOF
 ```
+
+> [!NOTE]
+> `-15` is an example starting point. Replace it with the per-core values for your chip.
 
 ### Enable service
 
@@ -96,7 +99,7 @@ sudo systemctl status ryzen-undervolt.service # check service status
 ```sh
 sudo python ruv.py -h # show help
 sudo python ruv.py -l # list current offsets
-sudo python ruv.py -c 8 -o -30 # set all cores to -30 offset
+sudo python ruv.py -c 8 -o -15 # set all cores to -15 offset
 sudo python ruv.py -c 8 -o -30 -25 -20 -15 -10 -5 -5 -10 # set per-core offsets
 sudo python ruv.py -r # reset all offsets to 0
 ```
@@ -106,6 +109,9 @@ The script response confirms what values were stored.
 > [!NOTE]
 > Curve Optimizer offsets are limited to -30...30 range. The SMU will clamp within that range and the `ruv.py` script rejects out-of-range values.
 > All offsets reset on reboot, so the tool must be installed as a service to re-apply them automatically.
+> **Start low.** Some 5800X3D samples can hold `-30` on all cores, others might become unstable. So, apply values, stress test, and keep what works for your CPU.
+> A bad offset does not stop the machine from powering on: it shows up as crashes or errors under load, after the service has applied it.
+> If that leaves the machine unusable, boot with `systemd.unit=rescue.target` on the kernel command line so the service never runs, then `systemctl disable ryzen-undervolt.service` in that shell. Offsets are gone after the next reboot.
 
 ### Verify after restart / sleep
 
