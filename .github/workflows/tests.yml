@@ -1,4 +1,4 @@
-name: tests
+name: checks
 
 on: [push, pull_request]
 
@@ -6,8 +6,16 @@ permissions:
   contents: read
 
 jobs:
-  tests:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # pinned so CI and a local ruff behave the same; bump deliberately
+      - uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.17.2"
+      - uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.17.2"
+          args: "format --check"
       - run: python3 -m unittest discover -v
