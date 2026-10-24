@@ -132,21 +132,6 @@ def set_core_offset(core_id, value):
 
 
 def main():
-    if not is_root():
-        print("Script must be run with root privileges.")
-        sys.exit(1)
-
-    if not cpu_supported():
-        print(
-            f"This tool only supports Zen 3 Vermeer CPUs "
-            f"(family {CPU_FAMILY}, model {CPU_MODEL}, e.g. Ryzen 7 5800X3D)."
-        )
-        sys.exit(1)
-
-    if not driver_loaded():
-        print(f"The ryzen_smu driver doesn't seem to be loaded at {FS_PATH}")
-        sys.exit(1)
-
     parser = argparse.ArgumentParser(
         description="PBO Curve Optimizer utility for Ryzen 5800X3D"
     )
@@ -182,6 +167,22 @@ def main():
     cc = args.corecount
     if not 1 <= cc <= 8:
         parser.error("--corecount must be between 1 and 8 (5800X3D has 8 cores).")
+
+    # Checked after parsing so -h works without root or the driver
+    if not is_root():
+        print("Script must be run with root privileges.")
+        sys.exit(1)
+
+    if not cpu_supported():
+        print(
+            f"This tool only supports Zen 3 Vermeer CPUs "
+            f"(family {CPU_FAMILY}, model {CPU_MODEL}, e.g. Ryzen 7 5800X3D)."
+        )
+        sys.exit(1)
+
+    if not driver_loaded():
+        print(f"The ryzen_smu driver doesn't seem to be loaded at {FS_PATH}")
+        sys.exit(1)
 
     # 1. LIST
     if args.list:

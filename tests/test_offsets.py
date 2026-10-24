@@ -100,6 +100,20 @@ class RuvTest(unittest.TestCase):
             self.run_main("-l", "-c", "9")
         self.assertEqual(exit.exception.code, 2)
 
+    def test_help_works_without_root_or_driver(self):
+        ruv.is_root = lambda: False
+        ruv.driver_loaded = lambda: False
+        with self.assertRaises(SystemExit) as exit:
+            self.run_main("-h")
+        self.assertEqual(exit.exception.code, 0)
+
+    def test_refuses_to_run_without_root(self):
+        ruv.is_root = lambda: False
+        with self.assertRaises(SystemExit) as exit:
+            self.run_main("-l")
+        self.assertEqual(exit.exception.code, 1)
+        self.assertEqual(self.smu.calls, [])
+
     def test_reset_verifies_every_core(self):
         self.smu.state = {core: -20 for core in range(8)}
         self.smu.stuck_reset = {6}

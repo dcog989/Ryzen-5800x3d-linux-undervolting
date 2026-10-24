@@ -97,7 +97,7 @@ sudo systemctl status ryzen-undervolt.service # check service status
 ## Usage
 
 ```sh
-sudo python ruv.py -h # show help
+python3 ruv.py -h # show help (no root needed)
 sudo python ruv.py -l # list current offsets
 sudo python ruv.py -c 8 -o -15 # set all cores to -15 offset
 sudo python ruv.py -c 8 -o -30 -25 -20 -15 -10 -5 -5 -10 # set per-core offsets
