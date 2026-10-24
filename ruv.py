@@ -208,7 +208,7 @@ def main():
             print("Failed to reset offsets.")
             sys.exit(1)
 
-        print("Offsets successfully reset to 0.")
+        print(f"Reset sent; cores 0-{cc - 1} read back 0.")
         sys.exit(0)
 
     # 3. SET OFFSETS
