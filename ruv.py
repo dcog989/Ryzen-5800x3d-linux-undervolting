@@ -205,6 +205,9 @@ def main():
             )
             sys.exit(1)
 
+        # Snapshot current offsets so a partial apply can be undone
+        previous = [get_core_offset(c) for c in range(cc)]
+
         # Apply offsets
         failed = 0
         for c, val in enumerate(offsets_to_apply):
@@ -225,6 +228,10 @@ def main():
                 failed += 1
 
         if failed:
+            for c, prev in enumerate(previous):
+                if not set_core_offset(c, 0 if prev is None else prev):
+                    print(f"Core {c}: failed to restore previous offset")
+            print("Apply failed; restored previous offsets where possible.")
             sys.exit(1)
 
 
