@@ -1,3 +1,8 @@
+[project]
+name = "ryzen-5800x3d-linux-undervolting"
+version = "0.0.0"
+requires-python = ">=3.10"
+
 [tool.ruff]
 # Bump together with the CI pin so local and CI formatting stay identical
 line-length = 88
