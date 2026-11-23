@@ -173,6 +173,13 @@ class RuvTest(unittest.TestCase):
             self.run_main("-r")
         self.assertEqual(exit.exception.code, 0)
 
+    def test_reset_verifies_cores_beyond_corecount(self):
+        self.smu.state = {core: -20 for core in range(8)}
+        self.smu.stuck_reset = {6}
+        with self.assertRaises(SystemExit) as exit:
+            self.run_main("-r", "-c", "4")
+        self.assertEqual(exit.exception.code, 1)
+
     def test_lock_is_held_for_the_whole_run(self):
         probes = []
 

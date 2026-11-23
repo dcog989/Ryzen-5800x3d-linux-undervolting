@@ -24,6 +24,7 @@ CPUINFO = "/proc/cpuinfo"
 CPU_FAMILY = 25
 CPU_MODEL = 33
 CPU_NAME = "5800X3D"
+CORE_COUNT = 8
 
 SMU_OP_SET_CO = 0x35
 SMU_OP_RESET_CO = 0x36
@@ -152,21 +153,21 @@ def main():
         "-r",
         "--reset",
         action="store_true",
-        help="Reset all offsets to 0, then verify the first --corecount cores",
+        help=f"Reset all offsets to 0, then verify all {CORE_COUNT} cores",
     )
 
     parser.add_argument(
         "-c",
         "--corecount",
-        default=8,
+        default=CORE_COUNT,
         type=int,
-        help="Number of cores to iterate over. Defaults to 8.",
+        help=f"Number of cores to list or set offsets for. Defaults to {CORE_COUNT}.",
     )
 
     args = parser.parse_args()
     cc = args.corecount
-    if not 1 <= cc <= 8:
-        parser.error("--corecount must be between 1 and 8 (5800X3D has 8 cores).")
+    if not 1 <= cc <= CORE_COUNT:
+        parser.error(f"--corecount must be between 1 and {CORE_COUNT}.")
 
     # Checked after parsing so -h works without root or the driver
     if os.geteuid() != 0:
@@ -216,7 +217,7 @@ def main():
             sys.exit(1)
 
         failed = 0
-        for c in range(cc):
+        for c in range(CORE_COUNT):
             offset = get_core_offset(c)
             if offset != 0:
                 print(
@@ -227,7 +228,7 @@ def main():
             print("Failed to reset offsets.")
             sys.exit(1)
 
-        print(f"Reset sent; cores 0-{cc - 1} read back 0.")
+        print(f"Reset sent; cores 0-{CORE_COUNT - 1} read back 0.")
         sys.exit(0)
 
     # 3. SET OFFSETS
