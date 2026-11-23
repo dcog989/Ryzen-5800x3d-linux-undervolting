@@ -19,7 +19,7 @@ This is a modified fork of the unmaintained [svenlange2/Ryzen-5800x3d-Linux-unde
 Requires:
 
 1. **`ryzen_smu`** — DKMS module (<https://github.com/amkillam/ryzen_smu>), a kernel driver that exposes the CPU's SMU.
-2. **`ruv.py`** — this repo, which requires the DKMS module.
+2. **`ryzen-undervolt.py`** — this repo, which requires the DKMS module and Python 3.10 or newer.
 
 ### Part 1: install the `ryzen_smu` kernel driver
 
@@ -27,17 +27,17 @@ Requires:
 
 Pick one method only: building it from source *and* installing the AUR package leaves two copies in DKMS.
 
-### Part 2: install `ruv.py`
+### Part 2: install `ryzen-undervolt.py`
 
 ```sh
 git clone https://github.com/dcog989/Ryzen-5800x3d-linux-undervolting.git
 cd Ryzen-5800x3d-linux-undervolting
 ```
 
-Install the script root-owned, so root never runs a file your user can edit. Rerun this after every change to `ruv.py`:
+Install the script root-owned, so root never runs a file your user can edit. Rerun this after every change to `ryzen-undervolt.py`:
 
 ```sh
-sudo install -o root -g root -m 755 ruv.py /usr/local/sbin/ruv.py
+sudo install -o root -g root -m 755 ryzen-undervolt.py /usr/local/sbin/ryzen-undervolt.py
 ```
 
 Install as a systemd service:
@@ -50,7 +50,7 @@ After=multi-user.target suspend.target hibernate.target hybrid-sleep.target susp
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/ruv.py -c 8 -o -15
+ExecStart=/usr/local/sbin/ryzen-undervolt.py -c 8 -o -15
 
 [Install]
 WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
@@ -75,17 +75,17 @@ sudo systemctl status ryzen-undervolt.service # inactive (dead) after it ran is 
 ## Usage
 
 ```sh
-python3 ruv.py -h # show help (no root needed)
-sudo /usr/local/sbin/ruv.py -l # list current offsets
-sudo /usr/local/sbin/ruv.py -c 8 -o -15 # set all cores to -15 offset
-sudo /usr/local/sbin/ruv.py -c 8 -o -30 -25 -20 -15 -10 -5 -5 -10 # set per-core offsets
-sudo /usr/local/sbin/ruv.py -r # reset all offsets to 0
+python3 ryzen-undervolt.py -h # show help (no root needed)
+sudo /usr/local/sbin/ryzen-undervolt.py -l # list current offsets
+sudo /usr/local/sbin/ryzen-undervolt.py -c 8 -o -15 # set all cores to -15 offset
+sudo /usr/local/sbin/ryzen-undervolt.py -c 8 -o -30 -25 -20 -15 -10 -5 -5 -10 # set per-core offsets
+sudo /usr/local/sbin/ryzen-undervolt.py -r # reset all offsets to 0
 ```
 
 The script response confirms what values were stored.
 
 > [!NOTE]
-> Curve Optimizer offsets are limited to -30...30 range and the `ruv.py` script rejects out-of-range values.
+> Curve Optimizer offsets are limited to -30...30 range and the `ryzen-undervolt.py` script rejects out-of-range values.
 > All offsets reset on reboot, so the tool must be installed as a service to re-apply them automatically at boot and after each resume.
 > **Start low.** Some 5800X3D samples can hold `-30` on all cores, others might become unstable. So, apply values, stress test, and keep what works for your CPU.
 > A bad offset does not stop the machine from powering on: it shows up as crashes or errors under load, after the service has applied it.
@@ -94,7 +94,7 @@ The script response confirms what values were stored.
 ### Verify after restart / sleep
 
 ```sh
-sudo /usr/local/sbin/ruv.py -l -c 8
+sudo /usr/local/sbin/ryzen-undervolt.py -l -c 8
 ```
 
 ---

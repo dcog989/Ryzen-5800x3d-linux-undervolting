@@ -12,7 +12,7 @@ import struct
 import sys
 
 FS_PATH = "/sys/kernel/ryzen_smu_drv/"
-LOCK_PATH = "/run/ruv.lock"
+LOCK_PATH = "/run/ryzen-undervolt.lock"
 
 VER_PATH = FS_PATH + "version"
 SMU_ARGS = FS_PATH + "smu_args"
@@ -192,7 +192,7 @@ def main():
         os.fchmod(lock_fd, 0o600)  # a lock file from an older run may be 0644
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        print("Another ruv.py run is in progress; nothing was changed.")
+        print("Another ryzen-undervolt run is in progress; nothing was changed.")
         sys.exit(1)
     except OSError as e:
         print(f"Cannot lock {LOCK_PATH}: {e}")

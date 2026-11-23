@@ -1,14 +1,24 @@
 import contextlib
 import fcntl
+import importlib.util
 import io
 import os
+import pathlib
 import signal
 import sys
 import tempfile
 import unittest
+from importlib.machinery import SourceFileLoader
 from unittest import mock
 
-import ruv
+# The script has no .py suffix, so load it from its path
+SCRIPT = pathlib.Path(__file__).resolve().parent.parent / "ryzen-undervolt.py"
+_loader = SourceFileLoader("ryzen_undervolt", str(SCRIPT))
+ryzen_undervolt = importlib.util.module_from_spec(
+    importlib.util.spec_from_loader("ryzen_undervolt", _loader)
+)
+sys.modules["ryzen_undervolt"] = ryzen_undervolt
+_loader.exec_module(ryzen_undervolt)
 
 
 class FakeSMU:
@@ -35,7 +45,7 @@ class FakeSMU:
     def __call__(self, op, arg1=0):
         self.calls.append((op, arg1))
         core = (arg1 >> 20) & 0xF
-        if op == ruv.SMU_OP_SET_CO:
+        if op == ryzen_undervolt.SMU_OP_SET_CO:
             if core in self.fail_set:
                 return None
             if core in self.interrupt_set:
@@ -43,7 +53,10 @@ class FakeSMU:
                 raise KeyboardInterrupt
             if core in self.term_set:
                 self.term_set.discard(core)
-                assert signal.getsignal(signal.SIGTERM) is ruv.interrupt_on_term
+                assert (
+                    signal.getsignal(signal.SIGTERM)
+                    is ryzen_undervolt.interrupt_on_term
+                )
                 os.kill(os.getpid(), signal.SIGTERM)
             value = arg1 & 0xFFFF
             offset = value - 0x10000 if value >= 0x8000 else value
@@ -52,12 +65,12 @@ class FakeSMU:
                 offset += 1
             self.state[core] = offset
             return (0,) * 6
-        if op == ruv.SMU_OP_GET_CO:
+        if op == ryzen_undervolt.SMU_OP_GET_CO:
             if core in self.fail_get:
                 return None
             value = self.state.get(core, 0) & 0xFFFF
             return (value, 0, 0, 0, 0, 0)
-        if op == ruv.SMU_OP_RESET_CO:
+        if op == ryzen_undervolt.SMU_OP_RESET_CO:
             self.state = {
                 core: value
                 for core, value in self.state.items()
@@ -67,20 +80,23 @@ class FakeSMU:
         raise AssertionError(f"unexpected SMU op {op:#x}")
 
 
-class RuvTest(unittest.TestCase):
+class UndervoltTest(unittest.TestCase):
     def setUp(self):
         self.smu = FakeSMU()
         self.saved = {
-            name: getattr(ruv, name) for name in ("smu_command", "cpu_supported")
+            name: getattr(ryzen_undervolt, name)
+            for name in ("smu_command", "cpu_supported")
         }
         self.argv = sys.argv
-        ruv.smu_command = self.smu
-        ruv.cpu_supported = lambda: True
-        self.patch("ruv.os.geteuid", 0)
-        self.patch("ruv.os.path.isfile", True)
+        ryzen_undervolt.smu_command = self.smu
+        ryzen_undervolt.cpu_supported = lambda: True
+        self.patch("ryzen_undervolt.os.geteuid", 0)
+        self.patch("ryzen_undervolt.os.path.isfile", True)
         lock_dir = tempfile.TemporaryDirectory()
         self.addCleanup(lock_dir.cleanup)
-        lock_path = mock.patch("ruv.LOCK_PATH", f"{lock_dir.name}/ruv.lock")
+        lock_path = mock.patch(
+            "ryzen_undervolt.LOCK_PATH", f"{lock_dir.name}/ryzen_undervolt.lock"
+        )
         lock_path.start()
         self.addCleanup(lock_path.stop)
         self.signals = {
@@ -101,33 +117,35 @@ class RuvTest(unittest.TestCase):
     def restore(self):
         sys.argv = self.argv
         for name, value in self.saved.items():
-            setattr(ruv, name, value)
+            setattr(ryzen_undervolt, name, value)
 
     def run_main(self, *argv):
-        sys.argv = ["ruv.py", *argv]
+        sys.argv = ["ryzen-undervolt", *argv]
         with (
             contextlib.redirect_stdout(io.StringIO()),
             contextlib.redirect_stderr(io.StringIO()),
         ):
-            ruv.main()
+            ryzen_undervolt.main()
 
     def cpuinfo_says(self, text):
         with tempfile.NamedTemporaryFile("w") as fp:
             fp.write(text)
             fp.flush()
-            saved, ruv.CPUINFO = ruv.CPUINFO, fp.name
+            saved, ryzen_undervolt.CPUINFO = ryzen_undervolt.CPUINFO, fp.name
             try:
                 return self.saved["cpu_supported"]()
             finally:
-                ruv.CPUINFO = saved
+                ryzen_undervolt.CPUINFO = saved
 
     def test_reads_negative_offset_as_signed(self):
         self.smu.state[0] = -30
-        self.assertEqual(ruv.get_core_offset(0), -30)
+        self.assertEqual(ryzen_undervolt.get_core_offset(0), -30)
 
     def test_writes_offset_with_core_index(self):
-        self.assertTrue(ruv.set_core_offset(3, -30))
-        self.assertEqual(self.smu.calls, [(ruv.SMU_OP_SET_CO, (3 << 20) | 0xFFE2)])
+        self.assertTrue(ryzen_undervolt.set_core_offset(3, -30))
+        self.assertEqual(
+            self.smu.calls, [(ryzen_undervolt.SMU_OP_SET_CO, (3 << 20) | 0xFFE2)]
+        )
 
     def test_cpu_supported_requires_5800x3d(self):
         vermeer = "cpu family\t: 25\nmodel\t\t: 33\nmodel name\t: AMD Ryzen 7 5800X3D 8-Core Processor\n"
@@ -168,8 +186,8 @@ class RuvTest(unittest.TestCase):
 
     def test_help_works_without_root_or_driver(self):
         with (
-            mock.patch("ruv.os.geteuid", return_value=1000),
-            mock.patch("ruv.os.path.isfile", return_value=False),
+            mock.patch("ryzen_undervolt.os.geteuid", return_value=1000),
+            mock.patch("ryzen_undervolt.os.path.isfile", return_value=False),
             self.assertRaises(SystemExit) as exit,
         ):
             self.run_main("-h")
@@ -177,7 +195,7 @@ class RuvTest(unittest.TestCase):
 
     def test_refuses_to_run_without_root(self):
         with (
-            mock.patch("ruv.os.geteuid", return_value=1000),
+            mock.patch("ryzen_undervolt.os.geteuid", return_value=1000),
             self.assertRaises(SystemExit) as exit,
         ):
             self.run_main("-l")
@@ -207,13 +225,13 @@ class RuvTest(unittest.TestCase):
     def test_lock_file_is_root_only(self):
         with self.assertRaises(SystemExit):
             self.run_main("-l")
-        self.assertEqual(os.stat(ruv.LOCK_PATH).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(ryzen_undervolt.LOCK_PATH).st_mode & 0o777, 0o600)
 
     def test_lock_is_held_for_the_whole_run(self):
         probes = []
 
         def probed_smu(op, arg1=0):
-            with open(ruv.LOCK_PATH, "w") as other:
+            with open(ryzen_undervolt.LOCK_PATH, "w") as other:
                 try:
                     fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
@@ -222,13 +240,13 @@ class RuvTest(unittest.TestCase):
                     probes.append(False)
             return self.smu(op, arg1)
 
-        ruv.smu_command = probed_smu
+        ryzen_undervolt.smu_command = probed_smu
         self.run_main("-o", "-20")
         self.assertTrue(probes)
         self.assertTrue(all(probes))
 
     def test_second_run_fails_fast_when_locked(self):
-        with open(ruv.LOCK_PATH, "w") as held:
+        with open(ryzen_undervolt.LOCK_PATH, "w") as held:
             fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
             with self.assertRaises(SystemExit) as exit:
                 self.run_main("-o", "-20")
@@ -250,7 +268,8 @@ class RuvTest(unittest.TestCase):
             self.run_main("-o", "-20")
         self.assertEqual(exit.exception.code, 1)
         self.assertEqual(
-            self.smu.calls, [(ruv.SMU_OP_GET_CO, core << 20) for core in range(8)]
+            self.smu.calls,
+            [(ryzen_undervolt.SMU_OP_GET_CO, core << 20) for core in range(8)],
         )
         self.assertEqual(self.smu.state, {core: -15 for core in range(8)})
 
