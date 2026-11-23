@@ -1,0 +1,5 @@
+[tool.ruff]
+# Bump together with the CI pin so local and CI formatting stay identical
+line-length = 88
+target-version = "py310"
+required-version = ">=0.17.2,<0.18"

@@ -11,10 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # pinned so CI and a local ruff behave the same; bump deliberately
-      - uses: astral-sh/ruff-action@v3
+      - uses: astral-sh/ruff-action@4919ec5cf1f49eff0871dbcea0da843445b837e6 # v3.1
         with:
           version: "0.17.2"
-      - uses: astral-sh/ruff-action@v3
+      - uses: astral-sh/ruff-action@4919ec5cf1f49eff0871dbcea0da843445b837e6 # v3.1
         with:
           version: "0.17.2"
           args: "format --check"
