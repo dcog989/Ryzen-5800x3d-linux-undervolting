@@ -16,22 +16,23 @@ class FakeSMU:
 
     def __init__(
         self,
-        initial=None,
         fail_set=(),
         fail_get=(),
         interrupt_set=(),
         stuck_reset=(),
         term_set=(),
+        mangle=(),
     ):
-        self.state = dict(initial or {})
+        self.state = {}
         self.fail_set = set(fail_set)
         self.fail_get = set(fail_get)
         self.interrupt_set = set(interrupt_set)
         self.stuck_reset = set(stuck_reset)
         self.term_set = set(term_set)
+        self.mangle = set(mangle)
         self.calls = []
 
-    def __call__(self, op, arg1=0, *args):
+    def __call__(self, op, arg1=0):
         self.calls.append((op, arg1))
         core = (arg1 >> 20) & 0xF
         if op == ruv.SMU_OP_SET_CO:
@@ -45,7 +46,11 @@ class FakeSMU:
                 assert signal.getsignal(signal.SIGTERM) is ruv.interrupt_on_term
                 os.kill(os.getpid(), signal.SIGTERM)
             value = arg1 & 0xFFFF
-            self.state[core] = value - 0x10000 if value >= 0x8000 else value
+            offset = value - 0x10000 if value >= 0x8000 else value
+            if core in self.mangle:  # SMU accepts the write but stores something else
+                self.mangle.discard(core)
+                offset += 1
+            self.state[core] = offset
             return (0,) * 6
         if op == ruv.SMU_OP_GET_CO:
             if core in self.fail_get:
@@ -131,6 +136,25 @@ class RuvTest(unittest.TestCase):
         self.assertFalse(self.cpuinfo_says(vermeer.replace(": 33", ": 97")))
         self.assertFalse(self.cpuinfo_says(vermeer.replace("5800X3D", "5950X")))
 
+    def test_per_core_offsets_are_applied(self):
+        values = [-30, -25, -20, -15, -10, -5, -5, -10]
+        self.run_main("-o", *[str(value) for value in values])
+        self.assertEqual(self.smu.state, dict(enumerate(values)))
+
+    def test_readback_mismatch_rolls_back_every_offset(self):
+        self.smu.state = {core: -15 for core in range(8)}
+        self.smu.mangle = {5}
+        with self.assertRaises(SystemExit) as exit:
+            self.run_main("-o", "-20")
+        self.assertEqual(exit.exception.code, 1)
+        self.assertEqual(self.smu.state, {core: -15 for core in range(8)})
+
+    def test_list_failure_exits_nonzero(self):
+        self.smu.fail_get = {0}
+        with self.assertRaises(SystemExit) as exit:
+            self.run_main("-l")
+        self.assertEqual(exit.exception.code, 1)
+
     def test_rejects_out_of_range_offset(self):
         with self.assertRaises(SystemExit) as exit:
             self.run_main("-o", "31")
@@ -188,7 +212,7 @@ class RuvTest(unittest.TestCase):
     def test_lock_is_held_for_the_whole_run(self):
         probes = []
 
-        def probed_smu(op, arg1=0, *args):
+        def probed_smu(op, arg1=0):
             with open(ruv.LOCK_PATH, "w") as other:
                 try:
                     fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -196,7 +220,7 @@ class RuvTest(unittest.TestCase):
                     probes.append(True)
                 else:
                     probes.append(False)
-            return self.smu(op, arg1, *args)
+            return self.smu(op, arg1)
 
         ruv.smu_command = probed_smu
         self.run_main("-o", "-20")
