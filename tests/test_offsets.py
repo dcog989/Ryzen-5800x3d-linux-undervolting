@@ -103,11 +103,12 @@ class RuvTest(unittest.TestCase):
         self.assertTrue(ruv.set_core_offset(3, -30))
         self.assertEqual(self.smu.calls, [(ruv.SMU_OP_SET_CO, (3 << 20) | 0xFFE2)])
 
-    def test_cpu_supported_reads_family_and_model(self):
-        vermeer = "cpu family\t: 25\nmodel\t\t: 33\nmodel name\t: AMD Ryzen 7 5800X3D\n"
+    def test_cpu_supported_requires_5800x3d(self):
+        vermeer = "cpu family\t: 25\nmodel\t\t: 33\nmodel name\t: AMD Ryzen 7 5800X3D 8-Core Processor\n"
         self.assertTrue(self.cpuinfo_says(vermeer))
         self.assertFalse(self.cpuinfo_says(vermeer.replace(": 25", ": 23")))
         self.assertFalse(self.cpuinfo_says(vermeer.replace(": 33", ": 97")))
+        self.assertFalse(self.cpuinfo_says(vermeer.replace("5800X3D", "5950X")))
 
     def test_rejects_out_of_range_offset(self):
         with self.assertRaises(SystemExit) as exit:

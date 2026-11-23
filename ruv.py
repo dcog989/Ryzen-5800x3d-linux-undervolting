@@ -18,9 +18,11 @@ SMU_ARGS = FS_PATH + "smu_args"
 MP1_CMD = FS_PATH + "mp1_smu_cmd"
 
 CPUINFO = "/proc/cpuinfo"
-# Zen 3 Vermeer (incl. 5800X3D) is family 19h model 21h; other families take different SMU messages
+# Zen 3 Vermeer is family 19h model 21h; every Vermeer shares it, so the model
+# name is what pins this tool to the 5800X3D
 CPU_FAMILY = 25
 CPU_MODEL = 33
+CPU_NAME = "5800X3D"
 
 SMU_OP_SET_CO = 0x35
 SMU_OP_RESET_CO = 0x36
@@ -32,11 +34,13 @@ def cpu_supported():
     with open(CPUINFO) as fp:
         for line in fp:
             key, sep, value = line.partition(":")
-            if sep and key.strip() in ("cpu family", "model"):
+            if sep and key.strip() in ("cpu family", "model", "model name"):
                 fields[key.strip()] = value.strip()
-    family = fields.get("cpu family")
-    model = fields.get("model")
-    return family == str(CPU_FAMILY) and model == str(CPU_MODEL)
+    return (
+        fields.get("cpu family") == str(CPU_FAMILY)
+        and fields.get("model") == str(CPU_MODEL)
+        and CPU_NAME in fields.get("model name", "")
+    )
 
 
 def read_file(file, size):
@@ -164,10 +168,7 @@ def main():
         sys.exit(1)
 
     if not cpu_supported():
-        print(
-            f"This tool only supports Zen 3 Vermeer CPUs "
-            f"(family {CPU_FAMILY}, model {CPU_MODEL}, e.g. Ryzen 7 5800X3D)."
-        )
+        print(f"This tool only supports the AMD Ryzen 7 {CPU_NAME}.")
         sys.exit(1)
 
     if not os.path.isfile(VER_PATH):
