@@ -1,6 +1,8 @@
 import contextlib
 import fcntl
 import io
+import os
+import signal
 import sys
 import tempfile
 import unittest
@@ -13,13 +15,20 @@ class FakeSMU:
     """Stands in for the kernel driver: keeps offsets and answers like the SMU."""
 
     def __init__(
-        self, initial=None, fail_set=(), fail_get=(), interrupt_set=(), stuck_reset=()
+        self,
+        initial=None,
+        fail_set=(),
+        fail_get=(),
+        interrupt_set=(),
+        stuck_reset=(),
+        term_set=(),
     ):
         self.state = dict(initial or {})
         self.fail_set = set(fail_set)
         self.fail_get = set(fail_get)
         self.interrupt_set = set(interrupt_set)
         self.stuck_reset = set(stuck_reset)
+        self.term_set = set(term_set)
         self.calls = []
 
     def __call__(self, op, arg1=0, *args):
@@ -31,6 +40,10 @@ class FakeSMU:
             if core in self.interrupt_set:
                 self.interrupt_set.discard(core)  # only the first write is interrupted
                 raise KeyboardInterrupt
+            if core in self.term_set:
+                self.term_set.discard(core)
+                assert signal.getsignal(signal.SIGTERM) is ruv.interrupt_on_term
+                os.kill(os.getpid(), signal.SIGTERM)
             value = arg1 & 0xFFFF
             self.state[core] = value - 0x10000 if value >= 0x8000 else value
             return (0,) * 6
@@ -65,7 +78,15 @@ class RuvTest(unittest.TestCase):
         lock_path = mock.patch("ruv.LOCK_PATH", f"{lock_dir.name}/ruv.lock")
         lock_path.start()
         self.addCleanup(lock_path.stop)
+        self.signals = {
+            sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)
+        }
+        self.addCleanup(self.restore_signals)
         self.addCleanup(self.restore)
+
+    def restore_signals(self):
+        for sig, handler in self.signals.items():
+            signal.signal(sig, handler)
 
     def patch(self, target, value):
         patcher = mock.patch(target, return_value=value)
@@ -200,6 +221,14 @@ class RuvTest(unittest.TestCase):
     def test_interrupt_rolls_back_every_offset(self):
         self.smu.state = {core: -15 for core in range(8)}
         self.smu.interrupt_set = {3}
+        with self.assertRaises(SystemExit) as exit:
+            self.run_main("-o", "-20")
+        self.assertEqual(exit.exception.code, 1)
+        self.assertEqual(self.smu.state, {core: -15 for core in range(8)})
+
+    def test_sigterm_rolls_back_every_offset(self):
+        self.smu.state = {core: -15 for core in range(8)}
+        self.smu.term_set = {3}
         with self.assertRaises(SystemExit) as exit:
             self.run_main("-o", "-20")
         self.assertEqual(exit.exception.code, 1)

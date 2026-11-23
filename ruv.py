@@ -7,6 +7,7 @@
 import argparse
 import fcntl
 import os
+import signal
 import struct
 import sys
 
@@ -123,6 +124,11 @@ def get_core_offset(core_id):
 def set_core_offset(core_id, value):
     result = smu_command(SMU_OP_SET_CO, (core_id << 20) | (value & 0xFFFF))
     return result is not None
+
+
+def interrupt_on_term(*_):
+    # SIGTERM (systemd stop, logout) must undo offsets like Ctrl-C does
+    raise KeyboardInterrupt
 
 
 def main():
@@ -259,6 +265,7 @@ def main():
         # Apply offsets; a failure or Ctrl-C rolls every core back to the snapshot
         failed = 0
         try:
+            signal.signal(signal.SIGTERM, interrupt_on_term)
             for c, val in enumerate(offsets_to_apply):
                 if set_core_offset(c, val):
                     readback = get_core_offset(c)
@@ -282,6 +289,9 @@ def main():
             failed += 1
 
         if failed:
+            # A second interrupt must not cut the restore short
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
             for c, prev in enumerate(previous):
                 if not set_core_offset(c, prev):
                     print(f"Core {c}: failed to restore previous offset")
