@@ -185,12 +185,12 @@ def main():
     # One run at a time: the driver shares smu_args between processes, so two
     # interleaved runs would each undo part of the other. The fd stays open, so
     # the lock is held until the process exits. Fail fast rather than wait, so a
-    # stuck holder never leaves this run hanging with no output.
+    # stuck holder never leaves this run hanging with no output. The file is
+    # root-only because a read-only open still allows an exclusive flock.
     try:
-        fcntl.flock(
-            os.open(LOCK_PATH, os.O_WRONLY | os.O_CREAT, 0o644),
-            fcntl.LOCK_EX | fcntl.LOCK_NB,
-        )
+        lock_fd = os.open(LOCK_PATH, os.O_WRONLY | os.O_CREAT, 0o600)
+        os.fchmod(lock_fd, 0o600)  # a lock file from an older run may be 0644
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         print("Another ruv.py run is in progress; nothing was changed.")
         sys.exit(1)

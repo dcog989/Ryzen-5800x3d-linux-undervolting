@@ -180,6 +180,11 @@ class RuvTest(unittest.TestCase):
             self.run_main("-r", "-c", "4")
         self.assertEqual(exit.exception.code, 1)
 
+    def test_lock_file_is_root_only(self):
+        with self.assertRaises(SystemExit):
+            self.run_main("-l")
+        self.assertEqual(os.stat(ruv.LOCK_PATH).st_mode & 0o777, 0o600)
+
     def test_lock_is_held_for_the_whole_run(self):
         probes = []
 
