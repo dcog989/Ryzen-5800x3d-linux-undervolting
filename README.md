@@ -64,7 +64,6 @@ Enable the service:
 
 ```sh
 sudo systemctl daemon-reload && sudo systemctl enable --now ryzen-undervolt.service
-sudo systemctl start ryzen-undervolt.service
 ```
 
 ```sh
